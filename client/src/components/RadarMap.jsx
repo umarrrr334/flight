@@ -70,7 +70,7 @@ function mapAirportIcon(airport) {
     iconSize: major ? [150, 38] : [118, 30],
     iconAnchor: major ? [10, 19] : [8, 15],
     html: `<div class="map-airport ${airport.type}">
-      <span><i></i><i></i><b>⌖</b></span>
+      <span><i></i><i></i><b>+</b></span>
       <label><strong>${code}</strong><small>${airport.name}</small></label>
     </div>`
   });
@@ -114,7 +114,7 @@ export default function RadarMap({ flights, selected, onSelect, trail, userPosit
       </>}
       {airports.map((airport) => (
         <Marker key={airport.ident} position={[airport.lat, airport.lon]} icon={mapAirportIcon(airport)} zIndexOffset={-500}>
-          <Tooltip direction="top" offset={[0, -12]}>{airport.name} · {airport.municipality || airport.country}</Tooltip>
+          <Tooltip direction="top" offset={[0, -12]}>{airport.name} - {airport.municipality || airport.country}</Tooltip>
         </Marker>
       ))}
       {flights.map((flight) => (

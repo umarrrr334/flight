@@ -87,17 +87,19 @@ app.get("/api/flights/live", (req, res) => {
     : flights;
   const limited = visible.slice(0, 1500).map((flight) => ({
     ...flight,
-    route: getCachedRoute(flight.callsign),
+    route: flight.route ?? getCachedRoute(flight.callsign),
     ...(includeTrails ? { trail: history.get(flight.icao24) ?? [] } : {})
   }));
-  warmRoutes(visible).catch(() => {});
+  warmRoutes(visible)
+    .then((hydrated) => hydrated > 0 && io.emit("flights:update", { source, lastUpdated, count: flights.length }))
+    .catch(() => {});
   res.json({ flights: limited, count: visible.length, source, lastUpdated, lastError });
 });
 
 app.get("/api/flights/:icao24", async (req, res) => {
   const flight = flights.find((item) => item.icao24 === req.params.icao24);
   if (!flight) return res.status(404).json({ message: "Aircraft not found in current live data." });
-  const route = await getRoute(flight.callsign);
+  const route = await getRoute(flight.callsign) ?? flight.route ?? null;
   return res.json({ ...flight, route, trail: history.get(flight.icao24) ?? [] });
 });
 

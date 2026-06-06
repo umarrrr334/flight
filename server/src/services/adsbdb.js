@@ -45,9 +45,11 @@ export function getCachedRoute(callsign) {
 
 export async function warmRoutes(flights, limit = 120) {
   const unresolved = flights
-    .filter((flight) => flight.callsign !== "UNKNOWN" && cachedRoute(cleanCallsign(flight.callsign)) === undefined)
+    .filter((flight) => !flight.route && flight.callsign !== "UNKNOWN" && cachedRoute(cleanCallsign(flight.callsign)) === undefined)
     .slice(0, limit);
+  if (unresolved.length === 0) return 0;
   for (let index = 0; index < unresolved.length; index += 8) {
     await Promise.all(unresolved.slice(index, index + 8).map((flight) => getRoute(flight.callsign)));
   }
+  return unresolved.length;
 }

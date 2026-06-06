@@ -13,6 +13,11 @@ const apiUrl = (path) => `${API_BASE_URL}${path}`;
 const toFeet = (meters) => meters * 3.28084;
 const toKnots = (mps) => mps * 1.94384;
 const getPattern = (flight) => flight.onGround ? "ground" : flight.verticalRate > 2 ? "climbing" : flight.verticalRate < -2 ? "descending" : "cruising";
+const airportCode = (airport) => airport?.iata_code || airport?.iata || airport?.icao_code || airport?.icao || airport?.ident || "---";
+const airportCity = (airport) => airport?.municipality || airport?.city || airport?.country_name || "Unknown";
+const airportName = (airport) => airport?.name || "Airport information unavailable";
+const hasRoute = (flight) => Boolean(flight.route?.origin && flight.route?.destination);
+const routeLabel = (flight) => hasRoute(flight) ? `${airportCode(flight.route.origin)} ${airportCode(flight.route.destination)} ${airportCity(flight.route.origin)} ${airportCity(flight.route.destination)}` : "";
 
 function Metric({ label, value, unit, icon: Icon }) {
   return (
@@ -24,10 +29,11 @@ function Metric({ label, value, unit, icon: Icon }) {
 }
 
 function FlightCard({ flight, selected, onClick }) {
-  const origin = flight.route?.origin?.iata_code ?? "---";
-  const destination = flight.route?.destination?.iata_code ?? "---";
+  const routeReady = hasRoute(flight);
+  const origin = airportCode(flight.route?.origin);
+  const destination = airportCode(flight.route?.destination);
   return (
-    <button className={`flight-card ${selected ? "selected" : ""}`} onClick={onClick}>
+    <button className={`flight-card ${selected ? "selected" : ""} ${routeReady ? "has-route" : ""}`} onClick={onClick}>
       <div className="flight-card-top">
         <span className="flight-ident"><Plane size={14} /> {flight.callsign}</span>
         <span className="live-dot">LIVE</span>
@@ -37,7 +43,7 @@ function FlightCard({ flight, selected, onClick }) {
         <span><i /><Plane size={13} /><i /></span>
         <strong>{destination}</strong>
       </div>
-      <div className="route-name">{flight.route ? `${flight.route.origin.municipality} to ${flight.route.destination.municipality}` : "Route information unavailable"}</div>
+      <div className="route-name">{routeReady ? `${airportCity(flight.route.origin)} to ${airportCity(flight.route.destination)}` : "Resolving origin and destination..."}</div>
       <div className="flight-card-meta">
         <span>ALT <b>{formatter.format(toFeet(flight.altitude))} ft</b></span>
         <span>SPD <b>{formatter.format(toKnots(flight.velocity))} kt</b></span>
@@ -91,7 +97,14 @@ export default function App() {
         if (!res.ok) throw new Error("Live flight service is unavailable.");
         return res.json();
       }).then((data) => {
-        setFlights(data.flights.map((flight) => ({ ...flight, pattern: getPattern(flight) })));
+        setFlights((current) => {
+          const knownRoutes = new Map(current.filter((flight) => flight.route).map((flight) => [flight.icao24, flight.route]));
+          return data.flights.map((flight) => ({
+            ...flight,
+            route: flight.route ?? knownRoutes.get(flight.icao24) ?? null,
+            pattern: getPattern(flight)
+          }));
+        });
         setSource(data.source); setLastUpdated(data.lastUpdated); setError("");
       }).catch((requestError) => {
         if (requestError.name !== "AbortError") {
@@ -177,7 +190,7 @@ export default function App() {
   }), []);
 
   const visibleFlights = useMemo(() => movingFlights.filter((flight) => {
-    const text = `${flight.callsign} ${flight.country} ${flight.icao24}`.toLowerCase();
+    const text = `${flight.callsign} ${flight.country} ${flight.icao24} ${routeLabel(flight)}`.toLowerCase();
     return (!airborneOnly || !flight.onGround) && (pattern === "all" || flight.pattern === pattern) && text.includes(query.toLowerCase());
   }), [movingFlights, airborneOnly, pattern, query]);
 
@@ -258,7 +271,7 @@ export default function App() {
           {effectsEnabled && <><div className="hologram-overlay"><div className="radar-disc"><i /><i /><i /><span /><b /><em /></div><div className="holo-reticle"><i /><i /><i /></div><div className="scanlines" /><div className="glitch-slice one" /><div className="glitch-slice two" /><div className="hud-corner tl" /><div className="hud-corner tr" /><div className="hud-corner bl" /><div className="hud-corner br" /></div><div className="hologram-map-label"><span>HOLOGRAPHIC AIRSPACE</span><b>LIVE VECTOR FIELD</b></div></>}
           {error && <div className="error-banner"><AlertTriangle size={14} /> {error}<button onClick={() => setRefreshSignal((value) => value + 1)}>Retry</button></div>}
           <div className="map-top">
-            <div className="data-pill"><Wifi size={13} /> {source === "opensky" ? "OPENSKY NETWORK" : source === "demo" ? "SIMULATED FALLBACK" : "CONNECTING"} <b>{visibleFlights.length} flights · {airports.length} airports</b></div>
+            <div className="data-pill"><Wifi size={13} /> {source === "opensky" ? "OPENSKY NETWORK" : source === "demo" ? "SIMULATED FALLBACK" : "CONNECTING"} <b>{visibleFlights.length} flights - {airports.length} airports</b></div>
             <div className="layer-buttons">
               <button className={`layers ${showAirports ? "active" : ""}`} onClick={() => setShowAirports(!showAirports)}><Building2 size={16} /> Airports</button>
               <button className={`layers ${showAllTrails ? "active" : ""}`} onClick={() => setShowAllTrails(!showAllTrails)}><Route size={16} /> Flight paths</button>
@@ -281,21 +294,21 @@ export default function App() {
           {selected && (
             <article className="detail-card">
               <button className="detail-close" onClick={() => setSelected(null)}><X size={15} /></button>
-              <div className="detail-kicker"><span><i /> TRACKING</span> ICAO · {selected.icao24.toUpperCase()} {selected.estimated && <b>INTERPOLATED</b>}</div>
+              <div className="detail-kicker"><span><i /> TRACKING</span> ICAO - {selected.icao24.toUpperCase()} {selected.estimated && <b>INTERPOLATED</b>}</div>
               <div className="detail-title"><div className="big-plane"><Plane size={22} /></div><div><h2>{selected.callsign}</h2><p>{selected.country}</p></div><ChevronRight size={17} /></div>
               <div className={`pattern-badge ${selected.pattern}`}>{selected.pattern} flight pattern</div>
-              {selected.route ? (
+              {hasRoute(selected) ? (
                 <div className="route-detail">
-                  <div><span>ORIGIN</span><strong>{selected.route.origin.iata_code}</strong><p>{selected.route.origin.name}</p><small>{selected.route.origin.municipality}, {selected.route.origin.country_name}</small></div>
+                  <div><span>ORIGIN</span><strong>{airportCode(selected.route.origin)}</strong><p>{airportName(selected.route.origin)}</p><small>{airportCity(selected.route.origin)}, {selected.route.origin.country_name ?? selected.route.origin.country ?? "Unknown"}</small></div>
                   <Plane size={17} />
-                  <div><span>DESTINATION</span><strong>{selected.route.destination.iata_code}</strong><p>{selected.route.destination.name}</p><small>{selected.route.destination.municipality}, {selected.route.destination.country_name}</small></div>
-                  <footer>{selected.route.airline?.name ?? "Airline unavailable"} · {selected.route.callsign_iata ?? selected.callsign}</footer>
+                  <div><span>DESTINATION</span><strong>{airportCode(selected.route.destination)}</strong><p>{airportName(selected.route.destination)}</p><small>{airportCity(selected.route.destination)}, {selected.route.destination.country_name ?? selected.route.destination.country ?? "Unknown"}</small></div>
+                  <footer>{selected.route.airline?.name ?? "Airline unavailable"} - {selected.route.callsign_iata ?? selected.callsign}</footer>
                 </div>
               ) : <div className="route-unavailable">Origin and destination are not published for this callsign.</div>}
               <div className="detail-grid">
                 <div><span>ALTITUDE</span><strong>{formatter.format(toFeet(selected.altitude))}<small> ft</small></strong></div>
                 <div><span>GROUND SPEED</span><strong>{formatter.format(toKnots(selected.velocity))}<small> kt</small></strong></div>
-                <div><span>HEADING</span><strong>{selected.heading.toFixed(0)}<small>°</small></strong></div>
+                <div><span>HEADING</span><strong>{selected.heading.toFixed(0)}<small> deg</small></strong></div>
                 <div><span>VERTICAL RATE</span><strong>{selected.verticalRate > 0 ? "+" : ""}{formatter.format(selected.verticalRate * 196.85)}<small> ft/m</small></strong></div>
               </div>
               <div className="coordinates"><MapPin size={14} /> {selected.lat.toFixed(4)}, {selected.lon.toFixed(4)} <span>{trail.length} trail points</span></div>
