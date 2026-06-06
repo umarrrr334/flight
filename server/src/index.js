@@ -11,7 +11,7 @@ import { findAirports, getAirportStatus, loadAirports } from "./services/airport
 import { fetchOpenSkyFlights } from "./services/opensky.js";
 
 const port = Number(process.env.PORT || 4000);
-const origin = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const origin = process.env.CLIENT_ORIGIN || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173";
 const pollInterval = Math.max(Number(process.env.POLL_INTERVAL_MS || 15000), 10000);
 const app = express();
 const httpServer = createServer(app);
