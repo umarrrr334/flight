@@ -1,0 +1,12 @@
+services:
+  skyradar:
+    build: .
+    ports:
+      - "4000:4000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: 4000
+      CLIENT_ORIGIN: http://localhost:4000
+    restart: unless-stopped
